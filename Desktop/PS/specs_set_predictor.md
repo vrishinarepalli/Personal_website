@@ -115,7 +115,68 @@ known_item = item_name
 # - Update item predictions (Leftovers, Assault Vest, etc.)
 ```
 
-#### 2.3 Set Correlation Matrix
+#### 2.3 Game Mechanic Constraints (Hard Rules)
+
+Unlike probabilistic updates, these are **absolute constraints** that immediately rule out impossible items:
+
+**CONSTRAINT 1: Choice Item Detection**
+```
+IF Pokemon uses 2+ different moves
+THEN item CANNOT BE Choice Band/Scarf/Specs
+```
+- Choice items lock the user into one move
+- Example: Kingambit uses Sucker Punch → Swords Dance
+- Result: All Choice items eliminated (probability set to 0)
+
+**CONSTRAINT 2: Assault Vest Detection**
+```
+IF Pokemon uses ANY non-attacking move
+THEN item CANNOT BE Assault Vest
+```
+- Assault Vest prevents all status moves
+- Non-attacking moves: Swords Dance, Stealth Rock, Protect, Recover, etc.
+- Attacking moves that deal damage: U-turn, Volt Switch, Rapid Spin (Gen 9+)
+- Example: Raging Bolt uses Calm Mind
+- Result: Assault Vest eliminated
+
+**CONSTRAINT 3: Heavy-Duty Boots Detection**
+```
+IF Pokemon takes entry hazard damage (Stealth Rock, Spikes)
+THEN item CANNOT BE Heavy-Duty Boots
+```
+- Heavy-Duty Boots prevent all entry hazard damage
+- Example: Pokemon switches in and takes 12.5% from Stealth Rock
+- Result: Heavy-Duty Boots eliminated
+
+**CONSTRAINT 4: Leftovers/Black Sludge Detection**
+```
+IF Pokemon heals 1/16 HP at end of turn (without any move)
+THEN item VERY LIKELY IS Leftovers or Black Sludge
+```
+- Passive healing indicates Leftovers/Black Sludge
+- Boosts probability to ~90%
+
+**CONSTRAINT 5: Life Orb Detection**
+```
+IF Pokemon takes 10% recoil damage after attacking
+THEN item VERY LIKELY IS Life Orb
+```
+- Life Orb causes 10% max HP recoil on each attack
+- Note: Some moves have natural recoil (Double-Edge, Brave Bird)
+
+**Test Results:**
+```
+Kingambit Example:
+Turn 1: 53% Leftovers, 11% Choice Scarf
+Turn 5 (after Sucker Punch + Swords Dance):
+  ⚠️  Ruled out Choice Band
+  ⚠️  Ruled out Choice Specs
+  ⚠️  Ruled out Choice Scarf
+  ⚠️  Ruled out Assault Vest
+Result: 59% Leftovers (probability redistributed)
+```
+
+#### 2.4 Set Correlation Matrix
 Build correlation data from Smogon usage:
 ```python
 correlations = {

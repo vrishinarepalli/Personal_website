@@ -31,6 +31,9 @@ class SetPrediction:
     confidence: float = 0.0
     turns_seen: int = 0
 
+    # Game mechanic constraints (items ruled out by observations)
+    impossible_items: Set[str] = field(default_factory=set)
+
 
 class SetPredictor:
     """Predicts Pokemon sets based on Smogon usage data and revealed information"""
@@ -48,6 +51,20 @@ class SetPredictor:
         # Cache for correlations
         self._move_correlations = {}
         self._set_archetypes = {}
+
+        # Define non-attacking moves (blocked by Assault Vest)
+        # Pivot moves like U-turn, Volt Switch deal damage so they're NOT in this list
+        self.non_attacking_moves = {
+            'Swords Dance', 'Nasty Plot', 'Dragon Dance', 'Calm Mind', 'Bulk Up', 'Quiver Dance',
+            'Stealth Rock', 'Spikes', 'Toxic Spikes', 'Sticky Web',
+            'Thunder Wave', 'Will-O-Wisp', 'Toxic', 'Spore', 'Sleep Powder', 'Hypnosis',
+            'Recover', 'Roost', 'Soft-Boiled', 'Wish', 'Synthesis', 'Morning Sun', 'Moonlight',
+            'Protect', 'Detect', 'Substitute', 'Taunt', 'Encore', 'Trick', 'Switcheroo',
+            'Defog', 'Haze', 'Whirlwind', 'Roar',
+            'Light Screen', 'Reflect', 'Tailwind', 'Trick Room', 'Magic Room', 'Wonder Room',
+            'Leech Seed', 'Rest', 'Sleep Talk', 'Baton Pass',
+            'Teleport', 'Parting Shot'  # Parting Shot lowers stats but deals no damage
+        }
 
     def create_initial_prediction(self, pokemon_name: str) -> SetPrediction:
         """
@@ -101,6 +118,9 @@ class SetPredictor:
         else:
             # Move wasn't in common sets, but now we know it exists
             prediction.move_probs[move_name] = 1.0
+
+        # Apply game mechanic constraints
+        prediction = self._apply_move_constraints(prediction, move_name)
 
         # Update other move probabilities based on correlations
         prediction = self._update_correlated_moves(prediction, move_name)
@@ -233,6 +253,99 @@ class SetPredictor:
             probs = {key: value / total for key, value in probs.items()}
 
         return probs
+
+    def _apply_move_constraints(self, prediction: SetPrediction, move_name: str) -> SetPrediction:
+        """
+        Apply hard constraints based on game mechanics
+
+        Args:
+            prediction: Current prediction
+            move_name: Move that was just used
+
+        Returns:
+            Updated prediction with constraints applied
+        """
+        if prediction.revealed_item:
+            # Item already known, no constraints to apply
+            return prediction
+
+        # CONSTRAINT 1: Using 2+ different moves → NOT a Choice item
+        if len(prediction.revealed_moves) >= 2:
+            choice_items = {'Choice Band', 'Choice Scarf', 'Choice Specs'}
+            for item in choice_items:
+                if item not in prediction.impossible_items:
+                    prediction.impossible_items.add(item)
+                    print(f"  ⚠️  Ruled out {item} (used {len(prediction.revealed_moves)} different moves)")
+
+        # CONSTRAINT 2: Using a non-attacking move → NOT Assault Vest
+        if move_name in self.non_attacking_moves:
+            if 'Assault Vest' not in prediction.impossible_items:
+                prediction.impossible_items.add('Assault Vest')
+                print(f"  ⚠️  Ruled out Assault Vest (used status move: {move_name})")
+
+        # Remove impossible items from probability distribution
+        for item in prediction.impossible_items:
+            if item in prediction.item_probs:
+                del prediction.item_probs[item]
+
+        # Renormalize item probabilities
+        total = sum(prediction.item_probs.values())
+        if total > 0:
+            prediction.item_probs = {
+                item: prob / total
+                for item, prob in prediction.item_probs.items()
+            }
+
+        return prediction
+
+    def _apply_damage_constraints(self, prediction: SetPrediction,
+                                   took_hazard_damage: bool = False,
+                                   healed_over_time: bool = False,
+                                   took_recoil: bool = False) -> SetPrediction:
+        """
+        Apply constraints based on damage observations
+
+        Args:
+            prediction: Current prediction
+            took_hazard_damage: Whether Pokemon took Stealth Rock/Spikes damage on switch-in
+            healed_over_time: Whether Pokemon healed at end of turn
+            took_recoil: Whether Pokemon took recoil damage from move
+
+        Returns:
+            Updated prediction
+        """
+        if prediction.revealed_item:
+            return prediction
+
+        # Took hazard damage → NOT Heavy-Duty Boots
+        if took_hazard_damage:
+            if 'Heavy-Duty Boots' not in prediction.impossible_items:
+                prediction.impossible_items.add('Heavy-Duty Boots')
+                print(f"  ⚠️  Ruled out Heavy-Duty Boots (took entry hazard damage)")
+                if 'Heavy-Duty Boots' in prediction.item_probs:
+                    del prediction.item_probs['Heavy-Duty Boots']
+
+        # Healed over time → likely Leftovers/Black Sludge
+        if healed_over_time:
+            healing_items = ['Leftovers', 'Black Sludge', 'Shell Bell']
+            for item in healing_items:
+                if item in prediction.item_probs:
+                    prediction.item_probs[item] *= 3.0  # Strong boost
+
+        # Took recoil → likely Life Orb (or recoil move like Brave Bird)
+        if took_recoil:
+            if 'Life Orb' in prediction.item_probs:
+                prediction.item_probs['Life Orb'] *= 2.0
+
+        # Renormalize
+        total = sum(prediction.item_probs.values())
+        if total > 0:
+            prediction.item_probs = {
+                item: prob / total
+                for item, prob in prediction.item_probs.items()
+            }
+
+        return prediction
 
     def _calculate_confidence(self, prediction: SetPrediction) -> float:
         """
@@ -478,6 +591,50 @@ def main():
         print(f"  - {move}: {prob:.1%}")
     print(f"\nTop Items (updated):")
     for item, prob in top['items']:
+        print(f"  - {item}: {prob:.1%}")
+
+    # Turn 7: Kingambit uses Kowtow Cleave
+    print("\n\n[Turn 7] Kingambit used Kowtow Cleave!")
+    print("-" * 60)
+    prediction = predictor.update_with_move(prediction, "Kowtow Cleave")
+
+    top = predictor.get_top_predictions(prediction, n=3)
+    print(f"Confidence: {prediction.confidence:.1%}")
+    print(f"\nRevealed Moves: {', '.join(top['revealed_moves'])}")
+    print(f"\nPredicted 4th Move:")
+    for move, prob in top['moves']:
+        print(f"  - {move}: {prob:.1%}")
+    print(f"\nTop Items (Choice items now ruled out):")
+    for item, prob in top['items']:
+        print(f"  - {item}: {prob:.1%}")
+
+    print("\n" + "=" * 60)
+
+    # Test 2: Assault Vest constraint
+    print("\n\n" + "=" * 60)
+    print("Constraint Test - Raging Bolt with Assault Vest")
+    print("=" * 60)
+
+    print("\n[Turn 1] Raging Bolt sent out")
+    print("-" * 60)
+    prediction2 = predictor.create_initial_prediction("Raging Bolt")
+
+    top2 = predictor.get_top_predictions(prediction2, n=3)
+    print(f"Top Items:")
+    for item, prob in top2['items']:
+        print(f"  - {item}: {prob:.1%}")
+
+    print("\n[Turn 2] Raging Bolt used Thunderbolt")
+    print("-" * 60)
+    prediction2 = predictor.update_with_move(prediction2, "Thunderbolt")
+
+    print("\n[Turn 3] Raging Bolt used Calm Mind (status move)")
+    print("-" * 60)
+    prediction2 = predictor.update_with_move(prediction2, "Calm Mind")
+
+    top2 = predictor.get_top_predictions(prediction2, n=3)
+    print(f"\nTop Items (Assault Vest ruled out):")
+    for item, prob in top2['items']:
         print(f"  - {item}: {prob:.1%}")
 
     print("\n" + "=" * 60)
