@@ -181,6 +181,24 @@ class SetPredictor:
         prediction.confidence = self._calculate_confidence(prediction)
         return prediction
 
+    def apply_damage_constraints(self, prediction: SetPrediction,
+                                 took_hazard_damage: bool = False,
+                                 healed_over_time: bool = False,
+                                 took_recoil: bool = False) -> SetPrediction:
+        """
+        Public method to apply damage-based constraints
+
+        Args:
+            prediction: Current prediction
+            took_hazard_damage: Whether Pokemon took entry hazard damage
+            healed_over_time: Whether Pokemon healed passively
+            took_recoil: Whether Pokemon took recoil damage
+
+        Returns:
+            Updated prediction
+        """
+        return self._apply_damage_constraints(prediction, took_hazard_damage, healed_over_time, took_recoil)
+
     def get_top_predictions(self, prediction: SetPrediction, n: int = 5) -> Dict[str, List[Tuple[str, float]]]:
         """
         Get top N predictions for each category
