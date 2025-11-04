@@ -209,7 +209,25 @@ class BattleParser {
             pokemon.maxHp = maxHp;
         }
 
-        // Check healing source
+        // Extract item name from source if explicitly mentioned
+        // Format: "[from] item: Leftovers" or "[from] Leftovers"
+        let confirmedItem = null;
+        if (source) {
+            // Match "item: ItemName" or just "ItemName" after [from]
+            const itemMatch = source.match(/item:\s*(.+)/i) || source.match(/\[from\]\s*(.+)/i);
+            if (itemMatch) {
+                const itemName = itemMatch[1].trim();
+                // Check if it's a healing item
+                if (itemName === 'Leftovers' || itemName === 'Black Sludge') {
+                    confirmedItem = itemName;
+                    if (pokemon) {
+                        pokemon.revealedItem = itemName;
+                    }
+                }
+            }
+        }
+
+        // Check healing source for probability boost (if not confirmed)
         const isPassiveHealing = source && (
             source.includes('Leftovers') ||
             source.includes('Black Sludge')
@@ -222,6 +240,7 @@ class BattleParser {
             hp,
             maxHp,
             isPassiveHealing,
+            confirmedItem,  // NEW: Explicit item confirmation
             source,
             isOpponent: side === this.battleState.opponentSide
         };

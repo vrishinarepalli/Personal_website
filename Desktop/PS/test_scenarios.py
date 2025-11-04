@@ -304,7 +304,111 @@ def scenario_6_full_battle():
     print("   Ability: Water Absorb (confirmed)")
 
 
-def scenario_7_choice_locked():
+def scenario_7_booster_energy_detection():
+    """Scenario 7: Booster Energy Detection via Ability Activation"""
+    print_section("SCENARIO 7: Booster Energy Detection")
+
+    dm = DataManager()
+    predictor = SetPredictor(dm)
+
+    print("\n🎮 Context: Protosynthesis/Quark Drive Pokemon switch in")
+    print("   Question: Is the ability activated by Booster Energy or weather/terrain?")
+
+    # Scenario A: Protosynthesis activates WITHOUT sun
+    print("\n\n━━━ SCENARIO A: Great Tusk (Protosynthesis) - NO SUN ━━━")
+
+    print_turn(1, "Opponent sends out Great Tusk")
+    print("   Weather: Clear (no sun)")
+    prediction_a = predictor.create_initial_prediction("Great Tusk")
+
+    print("\n📦 Initial Item Predictions:")
+    top_a = predictor.get_top_predictions(prediction_a)
+    for item, prob in top_a['items'][:5]:
+        print(f"   {item}: {prob:.1%}")
+
+    print_turn(1, "Great Tusk's Protosynthesis activated on switch!")
+    print("   💡 Ability activated but NO SUN present!")
+
+    predictor.apply_ability_activation_constraint(
+        prediction_a,
+        ability_activated_on_switch=True,
+        sun_active=False,
+        electric_terrain_active=False
+    )
+
+    print("\n📦 After Ability Activation:")
+    top_a = predictor.get_top_predictions(prediction_a)
+    for item, prob in top_a['items'][:5]:
+        icon = "✓" if prob == 1.0 else "●" if prob > 0.5 else "○"
+        print(f"   {icon} {item}: {prob:.1%}")
+
+    print("\n✅ Conclusion A: Item is DEFINITELY Booster Energy")
+    print("   Protosynthesis can only activate without sun via Booster Energy")
+
+    # Scenario B: Protosynthesis activates WITH sun
+    print("\n\n━━━ SCENARIO B: Great Tusk (Protosynthesis) - SUN ACTIVE ━━━")
+
+    print_turn(1, "Opponent sends out Great Tusk")
+    print("   Weather: Harsh sunlight (sun active)")
+    prediction_b = predictor.create_initial_prediction("Great Tusk")
+
+    print("\n📦 Initial Item Predictions:")
+    top_b = predictor.get_top_predictions(prediction_b)
+    for item, prob in top_b['items'][:5]:
+        print(f"   {item}: {prob:.1%}")
+
+    print_turn(1, "Great Tusk's Protosynthesis activated on switch!")
+    print("   💡 Ability activated naturally due to sun")
+
+    predictor.apply_ability_activation_constraint(
+        prediction_b,
+        ability_activated_on_switch=True,
+        sun_active=True,
+        electric_terrain_active=False
+    )
+
+    print("\n📦 After Ability Activation:")
+    top_b = predictor.get_top_predictions(prediction_b)
+    for item, prob in top_b['items'][:5]:
+        print(f"   {item}: {prob:.1%}")
+
+    print("\n✅ Conclusion B: Item is UNKNOWN")
+    print("   Protosynthesis activated naturally from sun")
+    print("   Could have ANY item (Leftovers, Rocky Helmet, etc.)")
+
+    # Scenario C: Iron Valiant with Quark Drive
+    print("\n\n━━━ SCENARIO C: Iron Valiant (Quark Drive) - NO TERRAIN ━━━")
+
+    print_turn(1, "Opponent sends out Iron Valiant")
+    print("   Terrain: None (no Electric Terrain)")
+    prediction_c = predictor.create_initial_prediction("Iron Valiant")
+
+    print("\n📦 Initial Item Predictions:")
+    top_c = predictor.get_top_predictions(prediction_c)
+    for item, prob in top_c['items'][:5]:
+        print(f"   {item}: {prob:.1%}")
+
+    print_turn(1, "Iron Valiant's Quark Drive activated on switch!")
+    print("   💡 Ability activated but NO Electric Terrain present!")
+
+    predictor.apply_ability_activation_constraint(
+        prediction_c,
+        ability_activated_on_switch=True,
+        sun_active=False,
+        electric_terrain_active=False
+    )
+
+    print("\n📦 After Ability Activation:")
+    top_c = predictor.get_top_predictions(prediction_c)
+    for item, prob in top_c['items'][:5]:
+        icon = "✓" if prob == 1.0 else "●" if prob > 0.5 else "○"
+        print(f"   {icon} {item}: {prob:.1%}")
+
+    print("\n✅ Conclusion C: Item is DEFINITELY Booster Energy")
+    print("   Quark Drive can only activate without terrain via Booster Energy")
+
+
+def scenario_8_choice_locked():
     """Scenario 7: Choice-Locked Pokemon"""
     print_section("SCENARIO 7: Choice-Locked Detection")
 
@@ -370,7 +474,8 @@ def main():
         ("4", "Heavy-Duty Boots Detection", scenario_4_boots_detection),
         ("5", "Leftovers Detection", scenario_5_leftovers_detection),
         ("6", "Complete Battle", scenario_6_full_battle),
-        ("7", "Choice-Locked Detection", scenario_7_choice_locked),
+        ("7", "Booster Energy Detection", scenario_7_booster_energy_detection),
+        ("8", "Choice-Locked Detection", scenario_8_choice_locked),
     ]
 
     print("\n📋 Available Scenarios:")

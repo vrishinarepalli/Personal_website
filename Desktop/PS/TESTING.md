@@ -72,6 +72,7 @@ Then during battle:
 ⚔️ Opponent's Kingambit used Sucker Punch
 ⚠️ Ruled out Choice Band (2 moves)
 ⚠️ Ruled out Assault Vest (status move: Swords Dance)
+✓ Kingambit item CONFIRMED: Leftovers (heal message)
 ```
 
 ## Testing Checklist
@@ -154,8 +155,8 @@ python convert_data_to_js.py
 ### Scenario 3: Leftovers Detection
 1. Opponent uses Kingambit
 2. Takes damage
-3. Heals 1/16 HP at end of turn
-4. **Expected:** Leftovers probability increases dramatically
+3. Heals 1/16 HP at end of turn with message "[from] item: Leftovers"
+4. **Expected:** Leftovers CONFIRMED at 100% (not just probability boost)
 
 ### Scenario 4: Heavy-Duty Boots Detection
 1. Set up Stealth Rock

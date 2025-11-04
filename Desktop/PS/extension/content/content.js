@@ -279,9 +279,21 @@
         let prediction = currentPredictions.get(species);
         if (!prediction) return;
 
-        // Check for passive healing (Leftovers/Black Sludge)
-        if (event.isPassiveHealing) {
-            console.log(`💚 ${species} healed passively (likely Leftovers)`);
+        // Check if item was explicitly confirmed from heal message
+        if (event.confirmedItem) {
+            console.log(`✓ ${species} item CONFIRMED: ${event.confirmedItem} (heal message)`);
+
+            // Update with 100% confirmed item
+            prediction = predictor.updateWithItem(prediction, event.confirmedItem);
+            currentPredictions.set(species, prediction);
+
+            // Update UI
+            const topPredictions = predictor.getTopPredictions(prediction);
+            predictionUI.update(species, prediction, topPredictions);
+        }
+        // Otherwise, just boost probability for passive healing
+        else if (event.isPassiveHealing) {
+            console.log(`💚 ${species} healed passively (likely Leftovers/Black Sludge)`);
             predictor.applyDamageConstraints(prediction, { healedOverTime: true });
             currentPredictions.set(species, prediction);
 

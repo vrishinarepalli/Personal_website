@@ -92,6 +92,21 @@ class SetPredictor:
         prediction.spread_probs = self._normalize_probs(moveset_data.get('spreads', {}))
         prediction.tera_probs = self._normalize_probs(moveset_data.get('tera_types', {}))
 
+        # AUTO-CONFIRM single-ability Pokemon
+        if len(prediction.ability_probs) == 1:
+            ability_name = list(prediction.ability_probs.keys())[0]
+            prediction.revealed_ability = ability_name
+            prediction.ability_probs = {ability_name: 1.0}
+            print(f"  ✓ Single ability: {ability_name} (auto-confirmed)")
+
+        # AUTO-CONFIRM required items (forme changes)
+        # Check if this Pokemon requires a specific item (e.g., Ogerpon masks)
+        required_item = self._get_required_item(pokemon_name)
+        if required_item:
+            prediction.revealed_item = required_item
+            prediction.item_probs = {required_item: 1.0}
+            print(f"  ✓ Required item: {required_item} (forme-specific)")
+
         # Calculate initial confidence (how concentrated is the distribution)
         prediction.confidence = self._calculate_confidence(prediction)
 
@@ -198,6 +213,64 @@ class SetPredictor:
             Updated prediction
         """
         return self._apply_damage_constraints(prediction, took_hazard_damage, healed_over_time, took_recoil)
+
+    def apply_ability_activation_constraint(self, prediction: SetPrediction,
+                                           ability_activated_on_switch: bool = False,
+                                           sun_active: bool = False,
+                                           electric_terrain_active: bool = False) -> SetPrediction:
+        """
+        Apply Booster Energy detection based on ability activation
+
+        Protosynthesis/Quark Drive can activate two ways:
+        1. Naturally (Sun for Protosynthesis, Electric Terrain for Quark Drive)
+        2. Via Booster Energy item (when weather/terrain not present)
+
+        Args:
+            prediction: Current prediction
+            ability_activated_on_switch: Whether Protosynthesis/Quark Drive activated on switch
+            sun_active: Whether harsh sunlight is active
+            electric_terrain_active: Whether Electric Terrain is active
+
+        Returns:
+            Updated prediction
+        """
+        if prediction.revealed_item:
+            return prediction
+
+        # Check if ability is Protosynthesis or Quark Drive
+        is_protosynthesis = prediction.revealed_ability == "Protosynthesis"
+        is_quark_drive = prediction.revealed_ability == "Quark Drive"
+
+        if not (is_protosynthesis or is_quark_drive):
+            return prediction
+
+        if ability_activated_on_switch:
+            # Protosynthesis activates in sun naturally
+            if is_protosynthesis and sun_active:
+                print(f"  ℹ️  Protosynthesis activated naturally (sun present)")
+                print(f"     Item is unknown - could be anything")
+                return prediction
+
+            # Quark Drive activates in Electric Terrain naturally
+            if is_quark_drive and electric_terrain_active:
+                print(f"  ℹ️  Quark Drive activated naturally (Electric Terrain present)")
+                print(f"     Item is unknown - could be anything")
+                return prediction
+
+            # If ability activated but NO weather/terrain, must be Booster Energy!
+            if is_protosynthesis and not sun_active:
+                print(f"  ⚡ Protosynthesis activated without sun!")
+                print(f"  ✓ Item CONFIRMED: Booster Energy")
+                prediction.revealed_item = "Booster Energy"
+                prediction.item_probs = {"Booster Energy": 1.0}
+
+            elif is_quark_drive and not electric_terrain_active:
+                print(f"  ⚡ Quark Drive activated without Electric Terrain!")
+                print(f"  ✓ Item CONFIRMED: Booster Energy")
+                prediction.revealed_item = "Booster Energy"
+                prediction.item_probs = {"Booster Energy": 1.0}
+
+        return prediction
 
     def get_top_predictions(self, prediction: SetPrediction, n: int = 5) -> Dict[str, List[Tuple[str, float]]]:
         """
@@ -548,6 +621,37 @@ class SetPredictor:
 
         # This is a simplified example
         return prediction
+
+    def _get_required_item(self, pokemon_name: str) -> Optional[str]:
+        """
+        Get required item for forme-specific Pokemon
+
+        Args:
+            pokemon_name: Pokemon species name
+
+        Returns:
+            Required item name, or None if no specific item required
+        """
+        # Forme-specific required items
+        required_items = {
+            # Ogerpon formes
+            'Ogerpon-Wellspring': 'Wellspring Mask',
+            'Ogerpon-Hearthflame': 'Hearthflame Mask',
+            'Ogerpon-Cornerstone': 'Cornerstone Mask',
+
+            # Arceus plates (if ever added to OU)
+            'Arceus-Fire': 'Flame Plate',
+            'Arceus-Water': 'Splash Plate',
+            'Arceus-Electric': 'Zap Plate',
+            # ... etc
+
+            # Silvally memories (if relevant)
+            'Silvally-Fire': 'Fire Memory',
+            'Silvally-Water': 'Water Memory',
+            # ... etc
+        }
+
+        return required_items.get(pokemon_name)
 
 
 def main():
